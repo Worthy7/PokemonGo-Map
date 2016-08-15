@@ -88,7 +88,7 @@ if __name__ == '__main__':
         logging.getLogger('pgoapi').setLevel(logging.DEBUG)
         logging.getLogger('rpc_api').setLevel(logging.DEBUG)
 
-    # use lat/lng directly if matches such a pattern
+    #use lat/lng directly if matches such a pattern
     prog = re.compile("^(\-?\d+\.\d+),?\s?(\-?\d+\.\d+)$")
     res = prog.match(args.location)
     if res:
@@ -98,7 +98,7 @@ if __name__ == '__main__':
         log.debug('Looking up coordinates in API')
         position = util.get_pos_by_name(args.location)
 
-    # Use the latitude and longitude to get the local altitude from Google
+    #Use the latitude and longitude to get the local altitude from Google
     try:
         url = 'https://maps.googleapis.com/maps/api/elevation/json?locations={},{}'.format(
             str(position[0]), str(position[1]))
@@ -114,6 +114,13 @@ if __name__ == '__main__':
 
     log.info('Parsed location is: %.4f/%.4f/%.4f (lat/lng/alt)',
              position[0], position[1], position[2])
+
+
+    if (len(args.locations) == 0):
+        log.error('No locations set.')
+        sys.exit()
+    else:
+        positions = args.locations
 
     if args.no_pokemon:
         log.info('Parsing of Pokemon disabled')
@@ -135,15 +142,25 @@ if __name__ == '__main__':
             os.remove(args.db)
     create_tables(db)
 
+
+    log.info("Setting position " + str(position))
     app.set_current_location(position)
 
     # Control the search status (running or not) across threads
     pause_bit = Event()
     pause_bit.clear()
 
+   
+
+
+
+
     # Setup the location tracking queue and push the first location on
     new_location_queue = Queue()
-    new_location_queue.put(position)
+
+    new_location_queue.put(args.location)
+
+
 
     if not args.only_server:
         # Gather the pokemons!

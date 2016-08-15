@@ -41,6 +41,16 @@ def memoize(function):
             return rv
     return wrapper
 
+def coords(s):
+    print "This is: " + str(s)
+    try:
+        x, y = map(float, s.split(" "))
+        return (x, y)
+
+        #x, y = map(float, s.split(' '))
+    except:
+        raise configargparse.ArgumentTypeError("Coordinates must be x y ")
+
 
 @memoize
 def get_args():
@@ -52,10 +62,16 @@ def get_args():
                         ptc or google. Defaults all to ptc.')
     parser.add_argument('-u', '--username', action='append',
                         help='Usernames, one per account.')
+    
     parser.add_argument('-p', '--password', action='append',
                         help='Passwords, either single one for all accounts or one per account.')
+
     parser.add_argument('-l', '--location', type=parse_unicode,
                         help='Location, can be an address or coordinates')
+
+    parser.add_argument('-locs', '--locations', type=coords, action='append',
+                        help='Locations, array of [lat, lon]')
+
     parser.add_argument('-st', '--step-limit', help='Steps', type=int,
                         default=12)
     parser.add_argument('-sd', '--scan-delay',
