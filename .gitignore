@@ -14,3 +14,5 @@ _build
 _build_html
 beehive.*
 spawns.json
+install.bat
+startup.bat
