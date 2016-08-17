@@ -268,8 +268,34 @@ def search_overseer_thread_ss(args, new_location_queue, pause_bit, encryption_li
     spawns.sort(key=itemgetter('time'))
     log.info('Total of %d spawns to track', len(spawns))
     # find the inital location (spawn thats 60sec old)
+
     pos = SbSearch(spawns, (curSec() + 3540) % 3600)
     while True:
+
+         # If a new location has been passed to us, update
+        if not (os.path.isfile(args.spawnpoint_scanning)) and not new_location_queue.empty():
+            log.info('New location caught, moving search grid')
+            try:
+                while True:
+                    loc = new_location_queue.get_nowait()
+            except Empty:
+                pass
+
+
+            spawns = Pokemon.get_spawnpoints_in_hex(loc, args.step_limit)
+            spawns.sort(key=itemgetter('time'))
+            log.info('Total of %d spawns to track', len(spawns))
+            pos = SbSearch(spawns, (curSec() + 3540) % 3600)
+
+            #We need to clear the search_items_queue (if we only care about 1 person)
+            if not search_items_queue.empty():
+                try:
+                    while True:
+                        search_items_queue.get_nowait()
+                except Empty:
+                    pass
+
+
         while timeDif(curSec(), spawns[pos]['time']) < 60:
             time.sleep(1)
         # make location with a dummy height (seems to be more reliable than 0 height)
