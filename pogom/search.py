@@ -155,7 +155,7 @@ def search_overseer_thread(args, new_location_queue, pause_bit, encryption_lib_p
             except Empty:
                 pass
 
-            # We (may) need to clear the search_items_queue
+            #We (may) need to clear the search_items_queue
             if not search_items_queue.empty():
                 try:
                     while True:
