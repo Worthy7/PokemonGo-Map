@@ -698,6 +698,10 @@ var StoreTypes = {
 }
 
 var StoreOptions = {
+  'id': {
+    default: 0,
+    type: StoreTypes.Number
+  },
   'map_style': {
     default: 'roadmap',
     type: StoreTypes.String
@@ -792,6 +796,7 @@ var Store = {
     localStorage.removeItem(key)
   }
 }
+Store.set('id', new Date().getTime())
 
 //
 // Functions
@@ -1693,7 +1698,7 @@ function changeLocation (lat, lng) {
 }
 
 function changeSearchLocation (lat, lng) {
-  return $.post('next_loc?lat=' + lat + '&lon=' + lng, {})
+  return $.post('next_loc?lat=' + lat + '&lon=' + lng + '&id=' + Store.get("id"), {})
 }
 
 function centerMap (lat, lng, zoom) {
