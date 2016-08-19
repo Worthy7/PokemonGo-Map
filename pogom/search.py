@@ -139,8 +139,29 @@ def SbSearch(Slist, T):
     return first
 
 
+
+def checkLocations(current_locations, user_locations):
+
+    #return true if something changed.
+    if (current_locations != user_locations):
+        log.info("Locations are different");
+        return True
+
+    #if any locations are out of date, remove them
+    for key, value in current_locations.iteritems():
+        if (value["time"] < (time.time() - 60)):
+            del current_locations[key]
+            del user_locations[key]
+            log.debug("Removed a user");
+            return True
+
+
+    return False
+
+
+
 # The main search loop that keeps an eye on the over all process
-def search_overseer_thread(args, new_location_queue, pause_bit, encryption_lib_path):
+def search_overseer_thread(args, user_locations, pause_bit, encryption_lib_path):
 
     log.info('Search overseer starting')
 
@@ -163,8 +184,14 @@ def search_overseer_thread(args, new_location_queue, pause_bit, encryption_lib_p
     locations = []
     spawnpoints = set()
 
+    current_locations = user_locations
+
     # The real work starts here but will halt on pause_bit.set()
     while True:
+
+        if len(user_locations) == 0:
+            time.sleep(1)
+            continue
 
         # paused; clear queue if needed, otherwise sleep and loop
         if pause_bit.is_set():
@@ -177,14 +204,12 @@ def search_overseer_thread(args, new_location_queue, pause_bit, encryption_lib_p
             time.sleep(1)
             continue
 
+
         # If a new location has been passed to us, get the most recent one
-        if not new_location_queue.empty():
+        if checkLocations(current_locations, user_locations):
             log.info('New location caught, moving search grid')
-            try:
-                while True:
-                    current_location = new_location_queue.get_nowait()
-            except Empty:
-                pass
+            
+            current_locations = user_locations.copy()
 
             #We (may) need to clear the search_items_queue
             if not search_items_queue.empty():
@@ -194,8 +219,10 @@ def search_overseer_thread(args, new_location_queue, pause_bit, encryption_lib_p
                 except Empty:
                     pass
 
-            # update our list of coords
-            locations = list(generate_location_steps(current_location, args.step_limit))
+            locations = []
+            for loc in user_locations:
+                # update our list of coords
+                locations += list(generate_location_steps([loc['lat'], loc['lng']], args.step_limit))
 
             # repopulate our spawn points
             if args.spawnpoints_only:
@@ -234,12 +261,13 @@ def search_overseer_thread(args, new_location_queue, pause_bit, encryption_lib_p
         time.sleep(1)
 
 
-def search_overseer_thread_ss(args, new_location_queue, pause_bit, encryption_lib_path):
+
+def search_overseer_thread_ss(args, user_locations, pause_bit, encryption_lib_path):
     log.info('Search ss overseer starting')
     search_items_queue = Queue()
     parse_lock = Lock()
     spawns = []
-
+    spawnpoint_scanning_ispath = os.path.isfile(args.spawnpoint_scanning)
     # Create a search_worker_thread per account
     log.info('Starting search worker threads')
     for i, account in enumerate(args.accounts):
@@ -250,11 +278,13 @@ def search_overseer_thread_ss(args, new_location_queue, pause_bit, encryption_li
         t.daemon = True
         t.start()
 
-    if os.path.isfile(args.spawnpoint_scanning):  # if the spawns file exists use it
+    if spawnpoint_scanning_ispath:  # if the spawns file exists use it
         try:
             with open(args.spawnpoint_scanning) as file:
                 try:
                     spawns = json.load(file)
+                    spawns.sort(key=itemgetter('time'))
+                    pos = SbSearch(spawns, (curSec() + 3540) % 3600)
                 except ValueError:
                     log.error(args.spawnpoint_scanning + " is not valid")
                     return
@@ -262,29 +292,40 @@ def search_overseer_thread_ss(args, new_location_queue, pause_bit, encryption_li
         except IOError:
             log.error("Error opening " + args.spawnpoint_scanning)
             return
-    else:  # if spawns file dose not exist use the db
-        loc = new_location_queue.get()
-        spawns = Pokemon.get_spawnpoints_in_hex(loc, args.step_limit)
-    spawns.sort(key=itemgetter('time'))
-    log.info('Total of %d spawns to track', len(spawns))
+
+    
+    log.info('Total of %d spawns to track, for %d users', len(spawns), len(user_locations))
     # find the inital location (spawn thats 60sec old)
 
-    pos = SbSearch(spawns, (curSec() + 3540) % 3600)
+    current_locations = user_locations.copy()
+
     while True:
 
+
+        if len(user_locations) == 0:
+            log.info("No users to track")
+            time.sleep(1)
+            if not search_items_queue.empty():
+                try:
+                    while True:
+                        search_items_queue.get_nowait()
+                except Empty:
+                    log.info('passing')
+                    pass
+            continue
+
          # If a new location has been passed to us, update
-        if not (os.path.isfile(args.spawnpoint_scanning)) and not new_location_queue.empty():
+        if ((not spawnpoint_scanning_ispath) and checkLocations(current_locations, user_locations)):
+            current_locations = user_locations.copy()
             log.info('New location caught, moving search grid')
-            try:
-                while True:
-                    loc = new_location_queue.get_nowait()
-            except Empty:
-                pass
+            spawns = []
+            for key, userLoc in current_locations.iteritems():
+            # update our list of coords
+                spawns += Pokemon.get_spawnpoints_in_hex([userLoc['lat'], userLoc['lng']], args.step_limit)
 
-
-            spawns = Pokemon.get_spawnpoints_in_hex(loc, args.step_limit)
             spawns.sort(key=itemgetter('time'))
-            log.info('Total of %d spawns to track', len(spawns))
+            log.info('Total of %d spawns to track, for %d users', len(spawns), len(user_locations))
+
             pos = SbSearch(spawns, (curSec() + 3540) % 3600)
 
             #We need to clear the search_items_queue (if we only care about 1 person)
@@ -293,16 +334,21 @@ def search_overseer_thread_ss(args, new_location_queue, pause_bit, encryption_li
                     while True:
                         search_items_queue.get_nowait()
                 except Empty:
+                    log.info('passing')
                     pass
 
 
-        while timeDif(curSec(), spawns[pos]['time']) < 60:
+        if len(spawns) == 0:
+            log.info('No spawns!')
             time.sleep(1)
-        # make location with a dummy height (seems to be more reliable than 0 height)
-        location = [spawns[pos]['lat'], spawns[pos]['lng'], 40.32]
-        search_args = (pos, location, spawns[pos]['time'])
-        search_items_queue.put(search_args)
-        pos = (pos + 1) % len(spawns)
+            continue
+
+        if timeDif(curSec(), spawns[pos]['time']) >= 60:
+            # make location with a dummy height (seems to be more reliable than 0 height)
+            location = [spawns[pos]['lat'], spawns[pos]['lng'], 40.32]
+            search_args = (pos, location, spawns[pos]['time'])
+            search_items_queue.put(search_args)
+            pos = (pos + 1) % len(spawns)
 
 
 def search_worker_thread(args, account, search_items_queue, parse_lock, encryption_lib_path):
@@ -396,6 +442,7 @@ def search_worker_thread(args, account, search_items_queue, parse_lock, encrypti
 def search_worker_thread_ss(args, account, search_items_queue, parse_lock, encryption_lib_path):
     stagger_thread(args, account)
     log.debug('Search worker ss thread starting')
+    
     # forever loop (for catching when the other forever loop fails)
     while True:
         try:

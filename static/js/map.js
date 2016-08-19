@@ -747,7 +747,7 @@ var StoreOptions = {
     type: StoreTypes.Boolean
   },
   'geoLocate': {
-    default: false,
+    default: true,
     type: StoreTypes.Boolean
   },
   'lockMarker': {
@@ -755,7 +755,7 @@ var StoreOptions = {
     type: StoreTypes.Boolean
   },
   'startAtUserLocation': {
-    default: false,
+    default: true,
     type: StoreTypes.Boolean
   },
   'pokemonIcons': {
@@ -796,6 +796,7 @@ var Store = {
     localStorage.removeItem(key)
   }
 }
+
 Store.set('id', new Date().getTime())
 
 //
@@ -961,10 +962,8 @@ function initSidebar () {
   var searchBox = new google.maps.places.SearchBox(document.getElementById('next-location'))
   $('#next-location').css('background-color', $('#geoloc-switch').prop('checked') ? '#e0e0e0' : '#ffffff')
 
-  updateSearchStatus()
-  setInterval(updateSearchStatus, 5000)
 
-  searchBox.addListener('places_changed', function () {
+  function placesChanged() {
     var places = searchBox.getPlaces()
 
     if (places.length === 0) {
@@ -973,7 +972,21 @@ function initSidebar () {
 
     var loc = places[0].geometry.location
     changeLocation(loc.lat(), loc.lng())
-  })
+  }
+
+function keepalive() {
+  $.post('keepalive?id=' + Store.get("id"), {})
+}
+setInterval(keepalive, 20000)
+
+updateSearchStatus()
+
+
+window.onbeforeunload = function() {
+  $.post('disconnect?id=' + Store.get("id"), {})
+}
+
+  searchBox.addListener('places_changed', placesChanged)
 
   var icons = $('#pokemon-icons')
   $.each(pokemonSprites, function (key, value) {
@@ -1691,6 +1704,8 @@ function addMyLocationButton () {
 
 function changeLocation (lat, lng) {
   var loc = new google.maps.LatLng(lat, lng)
+
+
   changeSearchLocation(lat, lng).done(function () {
     map.setCenter(loc)
     marker.setPosition(loc)
@@ -1921,7 +1936,7 @@ $(function () {
 
         // the search function makes any small movements cause a loop. Need to increase resolution
         if (getPointDistance(marker.getPosition(), (new google.maps.LatLng(lat, lon))) > 40) {
-          $.post(baseURL + '/next_loc?lat=' + lat + '&lon=' + lon).done(function () {
+          $.post(baseURL + '/next_loc?lat=' + lat + '&lon=' + lon + '&id=' + Store.get('id')).done(function () {
             var center = new google.maps.LatLng(lat, lon)
             map.panTo(center)
             marker.setPosition(center)

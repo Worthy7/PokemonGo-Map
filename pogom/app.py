@@ -12,6 +12,7 @@ from s2sphere import LatLng
 from pogom.utils import get_args
 from datetime import timedelta
 from collections import OrderedDict
+import time
 
 from . import config
 from .models import Pokemon, Gym, Pokestop, ScannedLocation
@@ -33,12 +34,16 @@ class Pogom(Flask):
         self.route("/search_control", methods=['GET'])(self.get_search_control)
         self.route("/search_control", methods=['POST'])(self.post_search_control)
         self.route("/stats", methods=['GET'])(self.get_stats)
+        self.route("/disconnect", methods=['POST'])(self.disconnect)
+        self.route("/keepalive", methods=['POST'])(self.keepalive)
+
+
 
     def set_search_control(self, control):
         self.search_control = control
 
-    def set_location_queue(self, queue):
-        self.location_queue = queue
+    def set_location_dict(self, dict):
+        self.user_locations = dict
 
     def set_current_location(self, location):
         self.current_location = location
@@ -113,12 +118,27 @@ class Pogom(Flask):
 
         return jsonify(d)
 
-    def loc(self):
+    def loc(self, userid):
         d = {}
-        d['lat'] = self.current_location[0]
-        d['lng'] = self.current_location[1]
+        d['lat'] = self.user_locations[userid]['lat']
+        d['lng'] = self.user_locations[userid]['lng']
 
         return jsonify(d)
+
+    def disconnect(self):
+        args = get_args()
+        userid = request.args.get('id', type=int)
+        log.info('User disconnecting, removing %s', userid)
+        del self.user_locations[userid]
+        return 'Ok' , 200
+
+    def keepalive(self):
+        args = get_args()
+        userid = request.args.get('id', type=int)
+        log.info('User %s keepalive ', userid)
+        self.user_locations[userid]['time'] = time.time()
+        return 'Ok' , 200
+
 
     def next_loc(self):
         args = get_args()
@@ -139,10 +159,10 @@ class Pogom(Flask):
         else:
             userid = request.args.get('id', type=int)
 
-            self.location_queue.put((lat, lon, 0))
-            self.set_current_location((lat, lon, 0))
-            log.info('Changing next location: %s,%s from user %s', lat, lon, userid)
-            return self.loc()
+            self.user_locations[userid]= {'lat': lat, 'lng' :lon, 'time': time.time()}
+            #self.set_current_location((lat, lon, 0))
+            log.info('Changing location: %s,%s for user %s', lat, lon, userid)
+            return self.loc(userid)
 
     def list_pokemon(self):
         # todo: check if client is android/iOS/Desktop for geolink, currently

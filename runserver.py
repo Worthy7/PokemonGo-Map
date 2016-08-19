@@ -144,16 +144,15 @@ if __name__ == '__main__':
     pause_bit.clear()
 
     # Setup the location tracking queue and push the first location on
-    new_location_queue = Queue()
-    new_location_queue.put(position)
-
+    user_locations = {}
+    
     if not args.only_server:
         # Gather the pokemons!
         if not args.mock:
             # check the sort of scan
             if not args.spawnpoint_scanning:
                 log.debug('Starting a real search thread')
-                search_thread = Thread(target=search_overseer_thread, args=(args, new_location_queue, pause_bit, encryption_lib_path))
+                search_thread = Thread(target=search_overseer_thread, args=(args, user_locations, pause_bit, encryption_lib_path))
             # using -ss
             else:
                 if args.dump_spawnpoints:
@@ -164,7 +163,7 @@ if __name__ == '__main__':
                         file.close()
                         log.info('Finished exporting spawns')
                 # start the scan sceduler
-                search_thread = Thread(target=search_overseer_thread_ss, args=(args, new_location_queue, pause_bit, encryption_lib_path))
+                search_thread = Thread(target=search_overseer_thread_ss, args=(args, user_locations, pause_bit, encryption_lib_path))
         else:
             log.debug('Starting a fake search thread')
             insert_mock_data(position)
@@ -181,7 +180,7 @@ if __name__ == '__main__':
     init_cache_busting(app)
 
     app.set_search_control(pause_bit)
-    app.set_location_queue(new_location_queue)
+    app.set_location_dict(user_locations)
 
     config['ROOT_PATH'] = app.root_path
     config['GMAPS_KEY'] = args.gmaps_key
