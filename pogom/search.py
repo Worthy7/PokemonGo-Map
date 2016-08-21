@@ -392,6 +392,7 @@ def search_overseer_thread_ss(args, user_locations, pause_bit, encryption_lib_pa
     parse_lock = Lock()
     spawns = []
     spawnpoint_scanning_ispath = os.path.isfile(args.spawnpoint_scanning)
+    current_locations = user_locations.copy()
 
     # Create a search_worker_thread per account
     threadStatus = {}
@@ -446,13 +447,14 @@ def search_overseer_thread_ss(args, user_locations, pause_bit, encryption_lib_pa
 
     else:  # if spawns file dose not exist use the db
         threadStatus['Overseer']['message'] = "Getting spawnpoints from database"
-        loc = new_location_queue.get()
-        spawns = Pokemon.get_spawnpoints_in_hex(loc, args.step_limit)
+        spawns = []
+        for key, userLoc in current_locations.iteritems():
+        # update our list of coords
+            spawns += Pokemon.get_spawnpoints_in_hex([userLoc['lat'], userLoc['lng']], args.step_limit)
     spawns.sort(key=itemgetter('time'))
     log.info('Total of %d spawns to track, for %d users', len(spawns), len(user_locations))
     # find the inital location (spawn thats 60sec old)
 
-    current_locations = user_locations.copy()
 
     while True:
 
